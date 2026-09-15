@@ -4,7 +4,7 @@ from streamlit_autorefresh import st_autorefresh
 
 
 # =========================================================
-# 기본 설정
+# 페이지 설정
 # =========================================================
 
 st.set_page_config(
@@ -26,28 +26,18 @@ INITIAL_PRICES = {
     "SOL": 200_000,
 }
 
-
-# =========================================================
-# 1.5초마다 자동 새로고침
-# =========================================================
-
-st_autorefresh(
-    interval=1500,
-    key="coin_game_refresh"
-)
+COINS = ["BTC", "ETH", "SOL"]
 
 
 # =========================================================
-# 게임 데이터 초기화
+# 세션 데이터 초기화
 # =========================================================
 
 if "money" not in st.session_state:
-
     st.session_state.money = INITIAL_MONEY
 
 
 if "coins" not in st.session_state:
-
     st.session_state.coins = {
         "BTC": 0,
         "ETH": 0,
@@ -56,46 +46,44 @@ if "coins" not in st.session_state:
 
 
 if "prices" not in st.session_state:
-
-    st.session_state.prices = (
-        INITIAL_PRICES.copy()
-    )
+    st.session_state.prices = INITIAL_PRICES.copy()
 
 
 if "history" not in st.session_state:
-
     st.session_state.history = []
+
+
+# ---------------------------------------------------------
+# 버튼을 눌렀을 때 가격 변경을 막기 위한 변수
+# ---------------------------------------------------------
+
+if "skip_price_update" not in st.session_state:
+    st.session_state.skip_price_update = False
 
 
 # =========================================================
 # 매수 / 매도 수량 초기화
-#
-# 중요:
-# 이제 소수점이 아니라 정수 단위
 # =========================================================
 
-for coin in ["BTC", "ETH", "SOL"]:
+for coin in COINS:
 
     buy_key = f"buy_quantity_{coin}"
     sell_key = f"sell_quantity_{coin}"
 
     if buy_key not in st.session_state:
-
         st.session_state[buy_key] = 1
 
-
     if sell_key not in st.session_state:
-
         st.session_state[sell_key] = 1
 
 
 # =========================================================
-# 가격 변동 함수
+# 가격 업데이트
 # =========================================================
 
 def update_prices():
 
-    for coin in st.session_state.prices:
+    for coin in COINS:
 
         # -3% ~ +3%
         change = random.uniform(
@@ -103,51 +91,80 @@ def update_prices():
             0.03
         )
 
-        old_price = (
-            st.session_state.prices[coin]
-        )
+        old_price = st.session_state.prices[coin]
 
-        new_price = (
-            old_price * (1 + change)
-        )
+        new_price = old_price * (1 + change)
 
-        # 최소 가격
+        # 최소 가격 1원
         new_price = max(
             1,
             new_price
         )
 
-        st.session_state.prices[coin] = (
-            new_price
-        )
+        st.session_state.prices[coin] = new_price
 
 
 # =========================================================
-# 코인 평가액
+# 버튼 클릭 시 호출되는 함수
+#
+# 버튼을 눌렀을 때 가격 업데이트를 건너뛰도록 설정
+# =========================================================
+
+def prevent_price_change():
+
+    st.session_state.skip_price_update = True
+
+
+# =========================================================
+# 1.5초 자동 새로고침
+# =========================================================
+
+st_autorefresh(
+    interval=1500,
+    key="automatic_market_refresh"
+)
+
+
+# =========================================================
+# 가격 업데이트
+#
+# 중요:
+# 일반 버튼을 눌러 화면이 다시 실행되었을 때는
+# 가격을 변경하지 않음.
+#
+# 자동 새로고침일 때만 가격 변경.
+# =========================================================
+
+if st.session_state.skip_price_update:
+
+    # 버튼 클릭 때문에 발생한 새로고침이면
+    # 가격을 그대로 유지한다.
+    st.session_state.skip_price_update = False
+
+else:
+
+    # 자동 새로고침
+    update_prices()
+
+
+# =========================================================
+# 계산 함수
 # =========================================================
 
 def get_coin_value():
 
     total = 0
 
-    for coin in st.session_state.coins:
+    for coin in COINS:
 
-        quantity = (
-            st.session_state.coins[coin]
-        )
+        quantity = st.session_state.coins[coin]
 
-        price = (
-            st.session_state.prices[coin]
-        )
+        price = st.session_state.prices[coin]
 
         total += quantity * price
 
     return total
 
-
-# =========================================================
-# 총 자산
-# =========================================================
 
 def get_total_asset():
 
@@ -157,10 +174,6 @@ def get_total_asset():
     )
 
 
-# =========================================================
-# 수익
-# =========================================================
-
 def get_profit():
 
     return (
@@ -169,10 +182,6 @@ def get_profit():
     )
 
 
-# =========================================================
-# 수익률
-# =========================================================
-
 def get_profit_rate():
 
     return (
@@ -180,13 +189,6 @@ def get_profit_rate():
         / INITIAL_MONEY
         * 100
     )
-
-
-# =========================================================
-# 시장 가격 업데이트
-# =========================================================
-
-update_prices()
 
 
 # =========================================================
@@ -199,9 +201,13 @@ st.caption(
     "⚡ 시장 가격은 1.5초마다 자동으로 변합니다."
 )
 
+st.info(
+    "💡 매수·매도·수량 조절 버튼을 눌러도 시장 가격은 변하지 않습니다."
+)
+
 
 # =========================================================
-# 현재 자산 계산
+# 자산 계산
 # =========================================================
 
 coin_value = get_coin_value()
@@ -257,21 +263,17 @@ st.divider()
 
 
 # =========================================================
-# 시장
+# 코인 시장
 # =========================================================
 
 st.subheader("📊 코인 시장")
 
 
-for coin in ["BTC", "ETH", "SOL"]:
+for coin in COINS:
 
-    price = (
-        st.session_state.prices[coin]
-    )
+    price = st.session_state.prices[coin]
 
-    quantity = (
-        st.session_state.coins[coin]
-    )
+    quantity = st.session_state.coins[coin]
 
     value = quantity * price
 
@@ -335,7 +337,6 @@ for coin in ["BTC", "ETH", "SOL"]:
         buy_key = f"buy_quantity_{coin}"
 
 
-        # 정수만 사용
         buy_quantity = st.number_input(
             "매수 수량",
             min_value=1,
@@ -359,7 +360,8 @@ for coin in ["BTC", "ETH", "SOL"]:
         if st.button(
             f"🟢 {coin} 매수",
             key=f"buy_button_{coin}",
-            use_container_width=True
+            use_container_width=True,
+            on_click=prevent_price_change
         ):
 
             if buy_quantity <= 0:
@@ -368,10 +370,7 @@ for coin in ["BTC", "ETH", "SOL"]:
                     "매수 수량을 입력하세요."
                 )
 
-            elif (
-                buy_cost
-                > st.session_state.money
-            ):
+            elif buy_cost > st.session_state.money:
 
                 st.error(
                     "현금이 부족합니다."
@@ -379,19 +378,26 @@ for coin in ["BTC", "ETH", "SOL"]:
 
             else:
 
+                # -------------------------------------------------
                 # 현금 차감
-                st.session_state.money -= (
-                    buy_cost
-                )
+                # -------------------------------------------------
+
+                st.session_state.money -= buy_cost
 
 
+                # -------------------------------------------------
                 # 코인 증가
+                # -------------------------------------------------
+
                 st.session_state.coins[coin] += (
                     buy_quantity
                 )
 
 
+                # -------------------------------------------------
                 # 거래 기록
+                # -------------------------------------------------
+
                 st.session_state.history.append(
                     {
                         "type": "매수",
@@ -424,7 +430,6 @@ for coin in ["BTC", "ETH", "SOL"]:
         sell_key = f"sell_quantity_{coin}"
 
 
-        # 정수만 사용
         sell_quantity = st.number_input(
             "매도 수량",
             min_value=1,
@@ -448,20 +453,21 @@ for coin in ["BTC", "ETH", "SOL"]:
         if st.button(
             f"🔴 {coin} 매도",
             key=f"sell_button_{coin}",
-            use_container_width=True
+            use_container_width=True,
+            on_click=prevent_price_change
         ):
 
+            # -------------------------------------------------
             # 보유량 검사
+            # -------------------------------------------------
+
             if sell_quantity <= 0:
 
                 st.error(
                     "매도 수량을 입력하세요."
                 )
 
-            elif (
-                sell_quantity
-                > st.session_state.coins[coin]
-            ):
+            elif sell_quantity > st.session_state.coins[coin]:
 
                 st.error(
                     "보유 수량이 부족합니다."
@@ -469,19 +475,28 @@ for coin in ["BTC", "ETH", "SOL"]:
 
             else:
 
+                # -------------------------------------------------
                 # 현금 증가
+                # -------------------------------------------------
+
                 st.session_state.money += (
                     sell_amount
                 )
 
 
+                # -------------------------------------------------
                 # 코인 감소
+                # -------------------------------------------------
+
                 st.session_state.coins[coin] -= (
                     sell_quantity
                 )
 
 
+                # -------------------------------------------------
                 # 거래 기록
+                # -------------------------------------------------
+
                 st.session_state.history.append(
                     {
                         "type": "매도",
@@ -515,15 +530,11 @@ st.subheader("💰 내 자산")
 asset_exists = False
 
 
-for coin in ["BTC", "ETH", "SOL"]:
+for coin in COINS:
 
-    quantity = (
-        st.session_state.coins[coin]
-    )
+    quantity = st.session_state.coins[coin]
 
-    price = (
-        st.session_state.prices[coin]
-    )
+    price = st.session_state.prices[coin]
 
     value = quantity * price
 
@@ -531,7 +542,6 @@ for coin in ["BTC", "ETH", "SOL"]:
     if quantity > 0:
 
         asset_exists = True
-
 
         col1, col2, col3 = st.columns(3)
 
@@ -615,16 +625,21 @@ st.subheader("⚙️ 게임")
 
 if st.button(
     "🔄 게임 초기화",
-    use_container_width=True
+    use_container_width=True,
+    on_click=prevent_price_change
 ):
 
-    # 현금
-    st.session_state.money = (
-        INITIAL_MONEY
-    )
+    # -----------------------------------------------------
+    # 현금 초기화
+    # -----------------------------------------------------
+
+    st.session_state.money = INITIAL_MONEY
 
 
-    # 코인
+    # -----------------------------------------------------
+    # 코인 초기화
+    # -----------------------------------------------------
+
     st.session_state.coins = {
         "BTC": 0,
         "ETH": 0,
@@ -632,31 +647,39 @@ if st.button(
     }
 
 
-    # 가격
+    # -----------------------------------------------------
+    # 가격 초기화
+    # -----------------------------------------------------
+
     st.session_state.prices = (
         INITIAL_PRICES.copy()
     )
 
 
-    # 거래 내역
+    # -----------------------------------------------------
+    # 거래 내역 초기화
+    # -----------------------------------------------------
+
     st.session_state.history = []
 
 
+    # -----------------------------------------------------
     # 수량 초기화
-    for coin in [
-        "BTC",
-        "ETH",
-        "SOL"
-    ]:
+    # -----------------------------------------------------
+
+    for coin in COINS:
 
         st.session_state[
             f"buy_quantity_{coin}"
         ] = 1
 
-
         st.session_state[
             f"sell_quantity_{coin}"
         ] = 1
 
+
+    st.success(
+        "게임이 초기화되었습니다."
+    )
 
     st.rerun()
